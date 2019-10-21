@@ -31,13 +31,13 @@ RUN git clone https://github.com/opencontainers/runc $GOPATH/src/github.com/open
     make BUILDTAGS='seccomp apparmor' && make install && \
     git clone https://github.com/ktock/containerd $GOPATH/src/github.com/containerd/containerd && \
     cd $GOPATH/src/github.com/containerd/containerd && \
-    git checkout remote-snapshotter && \
-    git checkout 53110e516e5b4c0cd5b81f61c01fd5e33a25edef && \
+    git checkout remote-snapshotter-target && \
+    git checkout 4cfc7682b5fbab2b890494bb4cf10d4662ff0f41 && \
     make && make install
 
 # helper for building and entrypoint
 COPY ./run.sh /
-RUN chmod 755 /run.sh &&  mkdir /etc/containerd
+RUN chmod 755 /run.sh && mkdir /etc/containerd
 COPY ./config.toml /etc/containerd/config.toml
 
 ENTRYPOINT ["/bin/bash"]

@@ -56,7 +56,7 @@ import (
 )
 
 const (
-	blockSize          uint32 = 512
+	blockSize uint32 = 512
 )
 
 type Config struct {
@@ -74,28 +74,20 @@ func init() {
 				return nil, fmt.Errorf("invalid stargz configuration")
 			}
 
-			return &filesystem{config.Insecure}, nil
+			return &filesystem{
+				insecure: config.Insecure,
+			}, nil
 		},
 	})
 }
 
 type filesystem struct {
+	root     nodefs.Node
 	insecure []string
 }
 
-func (fs *filesystem) Mounter() fsplugin.Mounter {
-	return &mounter{
-		fs: fs,
-	}
-}
-
-type mounter struct {
-	root nodefs.Node
-	fs   *filesystem
-}
-
 // TODO: schema, auth config with config files.
-func (m *mounter) Prepare(ref, digest string) error {
+func (fs *filesystem) Mount(ref, digest, mountpoint string) error {
 
 	// Parse host, owner and imagetag.
 	refs := strings.Split(ref, "/")
@@ -108,7 +100,7 @@ func (m *mounter) Prepare(ref, digest string) error {
 		return fmt.Errorf("image tag hasn't been specified.")
 	}
 	image := imagetag[0]
-	url := fmt.Sprintf("%s://%s/v2/%s/blobs/%s", m.scheme(host), host, image, digest)
+	url := fmt.Sprintf("%s://%s/v2/%s/blobs/%s", fs.scheme(host), host, image, digest)
 
 	// See if the layer is served with a redirect(GCR specific).
 	//
@@ -171,18 +163,15 @@ func (m *mounter) Prepare(ref, digest string) error {
 	if !ok {
 		return fmt.Errorf("failed to get a TOCEntry of the root node")
 	}
-	m.root = &node{
+	fs.root = &node{
 		Node: nodefs.NewDefaultNode(),
 		r:    r,
 		e:    root,
 	}
-	return nil
-}
 
-func (m *mounter) Mount(target string) error {
-	root := m.root
-	conn := nodefs.NewFileSystemConnector(root, nil)
-	server, err := fuse.NewServer(conn.RawFS(), target, &fuse.MountOptions{})
+	// Mount the filesystem
+	conn := nodefs.NewFileSystemConnector(fs.root, nil)
+	server, err := fuse.NewServer(conn.RawFS(), mountpoint, &fuse.MountOptions{})
 	// server.SetDebug(true)
 	if err != nil {
 		return fmt.Errorf("Mount failed: %v\n", err)
@@ -195,8 +184,8 @@ func (m *mounter) Mount(target string) error {
 	return nil
 }
 
-func (m *mounter) scheme(host string) string {
-	for _, i := range m.fs.insecure {
+func (fs *filesystem) scheme(host string) string {
+	for _, i := range fs.insecure {
 		if ok, _ := regexp.Match(i, []byte(host)); ok {
 			return "http"
 		}
