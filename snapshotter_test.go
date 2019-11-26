@@ -63,7 +63,7 @@ func newRemoteSnapshotter(t *testing.T, root string) (snapshots.Snapshotter, fun
 	if err != nil {
 		return nil, nil, err
 	}
-	snapshotter, err := NewSnapshotter(root, []plugin.FileSystem{fs})
+	snapshotter, err := NewSnapshotter(root, map[string]plugin.FileSystem{"test": fs})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -246,11 +246,6 @@ func TestRemoteCommit(t *testing.T) {
 	}
 }
 
-type filesystem struct {
-	root string
-	t    *testing.T
-}
-
 func bindFileSystem(t *testing.T) (plugin.FileSystem, error) {
 	root, err := ioutil.TempDir("", "remote")
 	if err != nil {
@@ -265,32 +260,17 @@ func bindFileSystem(t *testing.T) (plugin.FileSystem, error) {
 	}, nil
 }
 
-func (fs *filesystem) Mounter() plugin.Mounter {
-	return &mounter{
-		source: fs.root,
-		t:      fs.t,
-	}
+type filesystem struct {
+	t    *testing.T
+	root string
 }
 
-type mounter struct {
-	source string
-	target bool
-	t      *testing.T
-}
-
-func (m *mounter) Prepare(ref, digest string) error {
-	if ref == testRef && digest == testDigest {
-		m.target = true
+func (fs *filesystem) Mount(ref, digest, mountpoint string) error {
+	if ref != testRef || digest != testDigest {
+		return fmt.Errorf("layer not found")
 	}
-	return nil
-}
-
-func (m *mounter) Mount(target string) error {
-	if !m.target {
-		return nil
-	}
-	if err := syscall.Mount(m.source, target, "none", syscall.MS_BIND, ""); err != nil {
-		m.t.Fatalf("failed to bind mount %q to %q: %v", m.source, target, err)
+	if err := syscall.Mount(fs.root, mountpoint, "none", syscall.MS_BIND, ""); err != nil {
+		fs.t.Fatalf("failed to bind mount %q to %q: %v", fs.root, mountpoint, err)
 	}
 	return nil
 }
